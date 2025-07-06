@@ -1,0 +1,72 @@
+1. use the .env in frontend side
+
+REACT_APP_API_URL=http://localhost:5000
+
+2.use this inside your link inside the component like
+
+ const API_URL = process.env.REACT_APP_API_URL;
+
+ return (
+    <div style={{ border: '1px solid #ccc', padding: 20, marginBottom: 20 }}>
+      <h2>{business.name}</h2>
+
+      {/* Profile Image */}
+      <img
+        src={`${API_URL}${business.profileImage}`}
+        alt="Profile"
+        style={{ width: 150, height: 150 }}
+      />
+
+      {/* Cover Image */}
+      <img
+        src={`${API_URL}${business.coverImage}`}
+        alt="Cover"
+        style={{ width: '100%', height: 200, objectFit: 'cover', marginTop: 10 }}
+      />
+
+      {/* Gallery */}
+      <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+        {business.galleryImages.map((img, index) => (
+          <img
+            key={index}
+            src={`${API_URL}/${img}`}
+            alt={`Gallery ${index}`}
+            style={{ width: 100, height: 100, objectFit: 'cover' }}
+          />
+        ))}
+      </div>
+
+      {/* Certificate Links */}
+      <div style={{ marginTop: 10 }}>
+        {business.certificateImages.map((pdf, index) => (
+          <a
+            key={index}
+            href={`${API_URL}/${pdf}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View Certificate {index + 1}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+
+
+3. then render your component in the app
+
+4. final check the data again
+
+
+reffereal:  "referralCode": "SLS1234"
+"https://yourdomain.com/register-business?ref=SLS5973"
+
+https://yourdomain.com/register?ref=SLS5973
+
+
+{
+  "fullName": "Ravi Kumar",
+  "email": "rishiraj8618@gmail.com",
+  "password": "rameshpass123",
+  "role":"sales"
+}
