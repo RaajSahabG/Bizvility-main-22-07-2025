@@ -13,6 +13,7 @@ export const initNotificationSystem = (_io, _onlineUsers) => {
 
   // 🟢 Optional: Register global sender when initialized
   global.sendNotificationToUser = (userId, payload) => {
+    console.log(userId, socketId, payload);
     if (!io || !onlineUsers) {
       console.warn('⚠️ Socket system not initialized properly');
       return;

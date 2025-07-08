@@ -4,33 +4,6 @@ import Business from '../models/Business.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { notifyRole, notifyUser } from '../utils/sendNotification.js';
 
-// ✅ Create new event
-// export const createEvent = asyncHandler(async (req, res) => {
-//   const { business, title, description, startTime, endTime, link, location } = req.body;
-//   const bannerImage = req.file?.path;
-
-//   const businessExists = await Business.findById(business);
-//   if (!businessExists) {
-//     return res.status(404).json({ message: 'Business not found' });
-//   }
-
-//   const event = await Event.create({
-//     business,
-//     title,
-//     description,
-//     startTime,
-//     endTime,              
-//     link,
-//     location,
-//     bannerImage,
-//     isApproved: false // Admin will approve later
-//   });
-
-//   res.status(201).json({
-//     message: 'Event created successfully',
-//     event
-//   });
-// });
 
 //create event with notification
 // ✅ Create new event

@@ -19,6 +19,12 @@ router.get('/my-events', protect, getEventsByUser);
 router.get('/', protect, roles('superadmin', 'admin'), getAllEvents); // Admin can also view all user events
 
 // 🔐 Superadmin approval route
-router.put('/approve/:id', protect, roles('superadmin'), approveEvent);
+router.put(
+  '/approve/:id',
+  protect,
+  roles('superadmin'),
+  bannerUpload,  // ✅ Use single if only 1 image (as per your backend)
+  approveEvent
+);
 
 export default router;

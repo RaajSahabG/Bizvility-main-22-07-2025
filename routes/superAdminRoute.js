@@ -2,7 +2,7 @@
 // routes/superAdminRoutes.js
 
 import express from 'express';
-import { getAllUsers, getAllBusinessListings, updateUserProfile, deleteBusinessListingById, addNewUser, createUserBySuperAdmin } from '../controllers/SuperAdminController.js';
+import { getAllUsers, getAllBusinessListings, updateUserProfile, deleteBusinessListingById, addNewUser, createUserBySuperAdmin, handleDeleteRequest, handleDeleteRequestforBusiness } from '../controllers/SuperAdminController.js';
 import { protect } from '../middlewares/auth.js';          // JWT verify
 import  roles  from '../middlewares/roles.js';   // role guard
 import upload from '../middlewares/upload.js';
@@ -26,5 +26,12 @@ router.post(
   checkPermission('create_user'),
   createUserBySuperAdmin
 );
+router.put(
+  '/delete-requests/:requestId',
+  protect,
+  roles('superadmin'),
+  handleDeleteRequest
+);
+router.put('/delete-requests/:requestId', protect, roles('superadmin'), handleDeleteRequestforBusiness);
 
 export default router;

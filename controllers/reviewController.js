@@ -6,39 +6,6 @@ import { notifyUser, notifyRole } from '../utils/sendNotification.js'; // ✅ Im
 
 
 
-// ⭐ Create Review
-// export const createReview = async (req, res) => {
-//   try {
-//     const { businessId } = req.params;
-//     const { rating, comment } = req.body;
-
-//     // ✅ Optional: prevent empty reviews
-//     if (!rating && !comment) {
-//       return res.status(400).json({ message: 'Rating or comment is required' });
-//     }
-
-//     const review = new Review({
-//       user: req.user._id,
-//       business: businessId,
-//       rating: rating || undefined,
-//       comment: comment || ''
-//     });
-
-//     await review.save();
-
-//     // 🔁 Update average rating after new review
-//     await updateBusinessRating(businessId);
-
-//     res.status(201).json({
-//       message: 'Review submitted successfully',
-//       review
-//     });
-
-//   } catch (error) {
-//     console.error('Error creating review:', error);
-//     res.status(500).json({ message: 'Server Error', error: error.message });
-//   }
-// };
 //create review with notification
 // ⭐ Create Review
 export const createReview = async (req, res) => {

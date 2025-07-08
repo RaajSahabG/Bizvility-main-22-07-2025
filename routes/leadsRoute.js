@@ -7,7 +7,9 @@ import {
   updateLead,
   deleteLead,
   getLeadStats,
-  assignLead   
+  assignLeadsToSalesUser,
+  getAllLeads,
+  getLeadCountsPerSalesUser
 } from '../controllers/leadController.js';
 
 const router = express.Router();
@@ -16,10 +18,12 @@ router.use(protect); // Ensure only logged-in users access
 
 router.post('/', createLead);            // Create a lead
 router.get('/', getLeadsForUser);        // Fetch all leads for a user
+router.put('/assign', protect, roles('superadmin'), assignLeadsToSalesUser);
 router.put('/:id', updateLead);          // Update a lead
 router.delete('/:id', deleteLead);       // Delete a lead
 router.get('/stats', getLeadStats);    // Get lead statistics (if implemented)
 
-router.put('/assign/:leadId', protect, roles('superadmin'), assignLead);
+router.get('/all', protect, roles('admin', 'superadmin'), getAllLeads);
+router.get('/lead-counts', protect, roles('superadmin'), getLeadCountsPerSalesUser);
 
 export default router;

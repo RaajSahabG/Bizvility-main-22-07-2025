@@ -5,7 +5,7 @@ export const getNotifications = asyncHandler(async (req, res) => {
   const { _id: userId, role: userRole } = req.user;
 
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const limit = parseInt(req.query.limit) || 200;
   const skip = (page - 1) * limit;
   const unreadOnly = req.query.unreadOnly === 'true';
 
@@ -74,4 +74,53 @@ export const markAsRead = asyncHandler(async (req, res) => {
   await notification.save();
 
   res.status(200).json({ message: 'Notification marked as read' });
+});
+
+
+// controllers/notificationController.js
+// controllers/notificationController.js
+export const markNotificationAsRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const notification = await Notification.findByIdAndUpdate(
+      id,
+      { isRead: true },
+      { new: true }
+    );
+
+    if (!notification) {
+      return res.status(404).json({ message: 'Notification not found' });
+    }
+
+    res.status(200).json({
+      message: 'Notification marked as read',
+      notification
+    });
+  } catch (err) {
+    console.error('❌ Error marking notification as read:', err.message);
+    res.status(500).json({ message: 'Failed to mark notification as read' });
+  }
+};
+
+
+// PATCH /api/notifications/mark-all-read
+
+export const markAllNotificationsAsRead = asyncHandler(async (req, res) => {
+  const { _id: userId, role: userRole } = req.user;
+
+  const filter = {
+    $or: [
+      { user: userId },
+      { role: userRole }
+    ],
+    isRead: false
+  };
+
+  const result = await Notification.updateMany(filter, { isRead: true });
+
+  res.status(200).json({
+    message: 'All notifications marked as read',
+    modifiedCount: result.modifiedCount
+  });
 });

@@ -38,7 +38,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // CORS
 app.use(cors({
   origin: ['http://localhost:5173', 'http://localhost:5000'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT','Patch', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   exposedHeaders: ['Content-Type']
@@ -60,7 +60,7 @@ const onlineUsers = new Map();
 
 // 🎯 Socket.IO connection
 io.on('connection', (socket) => {
-  console.log('✅ Socket connected:', socket.id);
+  console.log('✅ Socket connected:', socket.id); 
 
   // Receive and register userId from frontend
   socket.on('register', (userId) => {

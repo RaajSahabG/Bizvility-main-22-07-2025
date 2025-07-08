@@ -1,11 +1,12 @@
 
 // controllers/SuperAdminController.js
 
-import business from '../models/Business.js';
+import Business from '../models/Business.js';
 import User from '../models/user.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import sendEmail from '../utils/emailSender.js';
 import Health from '../models/Health.js'; // Assuming you have a HealthMedical model
+import DeleteRequest from '../models/DeleteRequest.js';
 
 
 // get all users
@@ -272,3 +273,80 @@ export const createUserBySuperAdmin = asyncHandler(async (req, res) => {
     }
   });
 });
+// request user deletion
+export const handleDeleteRequest = async (req, res) => {
+  const { requestId } = req.params;
+  const { action } = req.body; // 'approve' or 'reject'
+
+  if (!['approve', 'reject'].includes(action)) {
+    return res.status(400).json({ message: 'Invalid action. Must be "approve" or "reject"' });
+  }
+
+  const deleteRequest = await DeleteRequest.findById(requestId);
+  if (!deleteRequest || deleteRequest.status !== 'pending') {
+    return res.status(404).json({ message: 'Delete request not found or already processed' });
+  }
+
+  // Optional: Fetch user to check existence
+  const userToDelete = await User.findById(deleteRequest.userToDelete);
+  if (action === 'approve') {
+    if (!userToDelete) {
+      return res.status(404).json({ message: 'Target user not found' });
+    }
+    await userToDelete.deleteOne(); // Safer than findByIdAndDelete for middleware
+    deleteRequest.status = 'approved';
+  } else {
+    deleteRequest.status = 'rejected';
+  }
+
+  deleteRequest.resolvedBy = req.user._id;
+  deleteRequest.resolvedAt = new Date();
+  await deleteRequest.save();
+
+  res.status(200).json({
+    message: `Delete request ${action}d successfully`,
+    deleteRequest
+  });
+};
+
+
+//handle the delete request for business deletion
+export const handleDeleteRequestforBusiness = async (req, res) => {
+  const { requestId } = req.params;
+  const { action } = req.body; // 'approve' or 'reject'
+
+  const request = await DeleteRequest.findById(requestId);
+  if (!request || request.status !== 'pending') {
+    return res.status(404).json({ message: 'Request not found or already handled' });
+  }
+
+  if (action === 'approve') {
+    // 👤 User deletion
+    if (request.userToDelete) {
+      await User.findByIdAndDelete(request.userToDelete);
+    }
+
+    // 🏢 Business deletion
+    if (request.businessToDelete) {
+      await Business.findByIdAndDelete(request.businessToDelete);
+    }
+
+    request.status = 'approved';
+    request.resolvedBy = req.user._id;
+    request.resolvedAt = new Date();
+
+  } else if (action === 'reject') {
+    request.status = 'rejected';
+    request.resolvedBy = req.user._id;
+    request.resolvedAt = new Date();
+  } else {
+    return res.status(400).json({ message: 'Invalid action. Use approve or reject.' });
+  }
+
+  await request.save();
+
+  res.status(200).json({
+    message: `Delete request ${action}d successfully`,
+    request
+  });
+};
