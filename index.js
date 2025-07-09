@@ -2,6 +2,7 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
+dotenv.config();
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoute.js';
 import adminRoutes from './routes/adminRoute.js';
@@ -20,10 +21,13 @@ import eventRoutes from './routes/eventRoute.js';
 import visitRoutes from './routes/visitRoutes.js';
 import leadsRoute from './routes/leadsRoute.js'; // Import leads route
 import notificationRoutes from './routes/notificationRoute.js';
+import paymentRoutes from "./routes/paymentRoute.js";
+
+
 import './cronJobs/leadReminderJob.js';
 import cors from 'cors';
 
-dotenv.config();
+
 const app = express();
 
 // Database connection
@@ -91,7 +95,7 @@ export { io, onlineUsers };
 
 
 
-
+console.log("RAZORPAY_KEY_ID:", process.env.RAZORPAY_KEY_ID);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -107,6 +111,8 @@ app.use('/api/events', eventRoutes);
 app.use('/api/visit', visitRoutes);
 app.use('/api/leads', leadsRoute); // Leads management route
 app.use('/api/notifications', notificationRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/invoices", express.static(path.join(path.resolve(), "invoices")));
 
 
 // app.get("/api/test-notification", (req, res) => {
