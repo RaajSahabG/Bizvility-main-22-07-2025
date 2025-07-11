@@ -20,6 +20,9 @@ const categoryModels = {
 
 //create business with notification
 export const createBusiness = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const {
       name,
@@ -49,7 +52,21 @@ export const createBusiness = async (req, res) => {
     const parsedServices = typeof services === 'string' ? JSON.parse(services) : services || {};
     const parsedCategoryData = typeof categoryData === 'string' ? JSON.parse(categoryData) : categoryData || {};
 
-    // 📅 Handle Business Hours
+    const registerNumber = parsedCategoryData?.registerNumber;
+    if (!registerNumber) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: 'Registration number is required' });
+    }
+
+    // ✅ Check for duplicate registration number before creating anything
+    const existingCategory = await CategoryModel.findOne({ registerNumber });
+    if (existingCategory) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(409).json({ message: 'Duplicate registration number. Business not created.' });
+    }
+
     let parsedBusinessHours = Array.isArray(businessHours)
       ? businessHours
       : JSON.parse(businessHours || '[]');
@@ -60,20 +77,21 @@ export const createBusiness = async (req, res) => {
       close: entry.close || ''
     }));
 
-    // 🖼️ Handle File Uploads
     const files = req.files || {};
     const profileImage = files.profileImage?.[0]?.path || null;
     const coverImage = files.coverImage?.[0]?.path || null;
     const certificateImages = files.certificateImages?.map(f => f.path).slice(0, 5) || [];
     const galleryImages = files.galleryImages?.map(f => f.path).slice(0, 10) || [];
 
-    // 🎯 Assign Sales Executive
     let salesExecutive = null;
-
     if (referralCode) {
       const refUser = await User.findOne({ referralCode });
-      if (refUser) salesExecutive = refUser._id;
-      else return res.status(400).json({ message: 'Invalid referral code' });
+      if (!refUser) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ message: 'Invalid referral code' });
+      }
+      salesExecutive = refUser._id;
     }
 
     if (!salesExecutive) {
@@ -84,8 +102,8 @@ export const createBusiness = async (req, res) => {
       }
     }
 
-    // 📦 Step 1: Create Business
-    const business = await Business.create({
+    // ✅ Step 1: Create Business (inside session)
+    const [business] = await Business.create([{
       name,
       ownerName,
       owner,
@@ -105,18 +123,22 @@ export const createBusiness = async (req, res) => {
       categoryModel: category,
       services: parsedServices,
       salesExecutive
-    });
+    }], { session });
 
-    // 🗂️ Step 2: Create category specific doc
-    const categoryDoc = await CategoryModel.create({
+    // ✅ Step 2: Create category-specific document (inside session)
+    const [categoryDoc] = await CategoryModel.create([{
       ...parsedCategoryData,
       business: business._id
-    });
+    }], { session });
 
     business.categoryRef = categoryDoc._id;
-    await business.save();
+    await business.save({ session });
 
-    // 📇 Step 3: Create Lead
+    // ✅ Commit the transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    // 📇 Create Lead (not part of transaction)
     try {
       const user = await User.findById(owner).select('fullName email');
       if (user) {
@@ -129,64 +151,57 @@ export const createBusiness = async (req, res) => {
           salesUser: salesExecutive || null,
           followUpDate: new Date(Date.now() + 2 * 60 * 1000)
         });
-        console.log("📈 Lead created for business listing");
       }
-    } catch (err) {
-      console.warn("⚠️ Lead creation failed:", err.message);
+    } catch (leadErr) {
+      console.warn("⚠️ Lead creation failed:", leadErr.message);
     }
 
-    // 🔔 Step 4: Notifications
-    // ➤ Notify Sales Executive (only 1)
-    // 🔔 Step 4: Notifications
-
-if (salesExecutive) {
-  // ✅ Notify Sales Executive
-  await notifyUser({
-    userId: salesExecutive,
-    type: 'NEW_BUSINESS_BY_REFERRAL',
-    title: '📢 New Business Listed',
-    message: `A new business "${name}" was listed by your referred user.`,
-    data: {
-      businessId: business._id,
-      businessName: name,
-      userId: owner,
-      redirectPath: `/sales/business/${business._id}`
+    // 🔔 Notifications
+    if (salesExecutive) {
+      await notifyUser({
+        userId: salesExecutive,
+        type: 'NEW_BUSINESS_BY_REFERRAL',
+        title: '📢 New Business Listed',
+        message: `A new business "${name}" was listed by your referred user.`,
+        data: {
+          businessId: business._id,
+          businessName: name,
+          userId: owner,
+          redirectPath: `/sales/business/${business._id}`
+        }
+      });
     }
-  });
-}
 
-// ✅ Notify Admins & Superadmins (Always)
-await Promise.all([
-  notifyRole({
-    role: 'admin',
-    type: 'NEW_BUSINESS_LISTED',
-    title: '🆕 Business Listing Submitted',
-    message: salesExecutive
-      ? `"${name}" has been listed and assigned to a sales executive.`
-      : `"${name}" has been listed but not yet assigned to any sales executive.`,
-    data: {
-      businessId: business._id,
-      ownerId: owner,
-      assignedTo: salesExecutive || null,
-      redirectPath: `/admin/business/${business._id}`
-    }
-  }),
-  notifyRole({
-    role: 'superadmin',
-    type: 'NEW_BUSINESS_LISTED',
-    title: '🆕 Business Listing Submitted',
-    message: salesExecutive
-      ? `"${name}" has been listed and assigned to a sales executive.`
-      : `"${name}" has been listed but not yet assigned to any sales executive.`,
-    data: {
-      businessId: business._id,
-      ownerId: owner,
-      assignedTo: salesExecutive || null,
-      redirectPath: `/superadmin/business/${business._id}`
-    }
-  })
-]);
-
+    await Promise.all([
+      notifyRole({
+        role: 'admin',
+        type: 'NEW_BUSINESS_LISTED',
+        title: '🆕 Business Listing Submitted',
+        message: salesExecutive
+          ? `"${name}" has been listed and assigned to a sales executive.`
+          : `"${name}" has been listed but not yet assigned to any sales executive.`,
+        data: {
+          businessId: business._id,
+          ownerId: owner,
+          assignedTo: salesExecutive || null,
+          redirectPath: `/admin/business/${business._id}`
+        }
+      }),
+      notifyRole({
+        role: 'superadmin',
+        type: 'NEW_BUSINESS_LISTED',
+        title: '🆕 Business Listing Submitted',
+        message: salesExecutive
+          ? `"${name}" has been listed and assigned to a sales executive.`
+          : `"${name}" has been listed but not yet assigned to any sales executive.`,
+        data: {
+          businessId: business._id,
+          ownerId: owner,
+          assignedTo: salesExecutive || null,
+          redirectPath: `/superadmin/business/${business._id}`
+        }
+      })
+    ]);
 
     const finalBusiness = await Business.findById(business._id).populate('salesExecutive');
 
@@ -196,6 +211,8 @@ await Promise.all([
     });
 
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
     console.error('❌ Error creating business:', error);
     res.status(500).json({ message: 'Server Error', error: error.message });
   }

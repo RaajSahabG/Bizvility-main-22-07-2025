@@ -12,7 +12,7 @@ import { checkPermission } from '../middlewares/checkPermission.js'; // Permissi
 const router = express.Router();
 
 // Only accessible to logged-in users with superadmin role
-router.get('/users', protect, roles('superadmin'), getAllUsers);
+router.get('/users', protect, roles('superadmin', "admin"), getAllUsers);
 
 
 // ✅ New route: Get all business listings

@@ -179,12 +179,19 @@ export const getAllReviews = asyncHandler(async (req, res) => {
   try {
     const reviews = await Review.find({})
       .populate('user', 'fullName profile.avatar')
-      .populate('business', 'name');
+      .lean();
+
+    const formattedReviews = reviews.map(({ business, user, ...rest }) => ({
+      ...rest,
+      businessId: business?.toString() || null, // renamed field
+      userName: user?.fullName || null,
+      avatar: user?.profile?.avatar || null,
+    }));
 
     res.status(200).json({
       status: 'success',
-      totalReviews: reviews.length,
-      reviews,
+      totalReviews: formattedReviews.length,
+      reviews: formattedReviews,
     });
   } catch (error) {
     console.error('❌ Failed to fetch reviews:', error);

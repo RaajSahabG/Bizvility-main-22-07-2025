@@ -2,9 +2,9 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
-dotenv.config();
+
 import connectDB from './config/db.js';
-import authRoutes from './routes/authRoute.js';
+import authRoutes from './routes/authRoute.js'; 
 import adminRoutes from './routes/adminRoute.js';
 import { errorHandler } from './utils/errorHandler.js';
 import businessRoutes from './routes/businessRoute.js';
@@ -22,10 +22,9 @@ import visitRoutes from './routes/visitRoutes.js';
 import leadsRoute from './routes/leadsRoute.js'; // Import leads route
 import notificationRoutes from './routes/notificationRoute.js';
 import paymentRoutes from "./routes/paymentRoute.js";
-
-
 import './cronJobs/leadReminderJob.js';
 import cors from 'cors';
+dotenv.config();
 
 
 const app = express();
@@ -42,7 +41,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // CORS
 app.use(cors({
   origin: ['http://localhost:5173', 'http://localhost:5000'],
-  methods: ['GET', 'POST', 'PUT','Patch', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT','PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   exposedHeaders: ['Content-Type']
@@ -63,22 +62,48 @@ const io = new Server(httpServer, {
 const onlineUsers = new Map();
 
 // 🎯 Socket.IO connection
-io.on('connection', (socket) => {
-  console.log('✅ Socket connected:', socket.id); 
+io.on("connection", (socket) => {
+  console.log("✅ Socket connected:", socket.id);
 
-  // Receive and register userId from frontend
-  socket.on('register', (userId) => {
-    onlineUsers.set(userId.toString(), socket.id); // 🔄 Ensure .toString()
-  console.log(`🟢 User registered: ${userId} -> ${socket.id}`);
-  console.log('✅ Current Online Users Map:', Array.from(onlineUsers.entries()));
+  // Handle user registration
+  socket.on("register", (data) => {
+    console.log("📩 Received register payload:", data);
+
+    // 🚫 Reject invalid data
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      console.warn("❌ Invalid register payload. Expected an object with userId and role.");
+      return;
+    }
+
+    const { userId, role } = data;
+
+    // 🚫 Reject if userId is not a string
+    if (!userId || typeof userId !== "string") {
+      console.warn("⚠️ Invalid or missing userId in registration.");
+      return;
+    }
+
+    const userStr = userId.trim();
+    onlineUsers.set(userStr, socket.id); // ✅ store string key only
+
+    // Join per-user room
+    socket.join(`user_${userStr}`);
+
+    // Join role-based room
+    if (role && typeof role === "string") {
+      socket.join(`role_${role}`);
+    }
+
+    console.log(`🟢 User ${userStr} joined room`);
+    console.log("✅ Current onlineUsers:", Array.from(onlineUsers.entries()));
   });
 
-  // Clean up on disconnect
-  socket.on('disconnect', () => {
+  // Cleanup on disconnect
+  socket.on("disconnect", () => {
     for (const [userId, sockId] of onlineUsers.entries()) {
       if (sockId === socket.id) {
         onlineUsers.delete(userId);
-        console.log(`🔴 User disconnected: ${userId}`);
+        console.log(`🔴 Disconnected: ${userId}`);
         break;
       }
     }
@@ -90,12 +115,7 @@ initNotificationSystem(io, onlineUsers);
 // Make io and onlineUsers accessible globally
 export { io, onlineUsers };
 
-
-
-
-
-
-console.log("RAZORPAY_KEY_ID:", process.env.RAZORPAY_KEY_ID);
+// console.log("RAZORPAY_KEY_ID:", process.env.RAZORPAY_KEY_ID);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
@@ -113,29 +133,6 @@ app.use('/api/leads', leadsRoute); // Leads management route
 app.use('/api/notifications', notificationRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/invoices", express.static(path.join(path.resolve(), "invoices")));
-
-
-// app.get("/api/test-notification", (req, res) => {
-//   const userId = "68612341c102a6966e31e5cf"; // Replace with a valid user ID from your DB
-
-//   const payload = {
-//     title: "🧪 Test Notification",
-//     message: "You received this in real-time!",
-//     time: new Date().toLocaleTimeString(),
-//     read: false,
-//     type: "system",
-//     id: Math.random(),
-//   };
-
-//   if (global.sendNotificationToUser) {
-//     global.sendNotificationToUser(userId, payload);
-//     return res.send("✅ Test notification sent!");
-//   } else {
-//     return res.status(500).send("❌ Notification system not initialized.");
-//   }
-// });
-
-
 
 
 // ✅ Serve static files from 'uploads' folder

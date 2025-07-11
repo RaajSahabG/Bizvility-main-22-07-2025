@@ -11,9 +11,9 @@ import DeleteRequest from '../models/DeleteRequest.js';
 
 // get all users
 export const getAllUsers = asyncHandler(async (req, res) => {
-  if (req.user.role !== 'superadmin') {
-    return res.status(403).json({ message: 'Access denied: SuperAdmin only.' });
-  }
+  // if (req.user.role !== 'superadmin') {
+  //   return res.status(403).json({ message: 'Access denied: SuperAdmin only.' });
+  // }
 
   // Get all users without sensitive fields
   const users = await User.find().select('-password -refreshTokens -emailVerifyOTP -resetPasswordOTP -emailVerifyExpires -resetPasswordExpires');
@@ -21,7 +21,7 @@ export const getAllUsers = asyncHandler(async (req, res) => {
   // For each user, count how many businesses they own
   const usersWithBusinessCounts = await Promise.all(
     users.map(async (user) => {
-      const businessCount = await business.countDocuments({ owner: user._id });
+      const businessCount = await Business.countDocuments({ owner: user._id });
 
       return {
         ...user.toObject(),
@@ -69,12 +69,9 @@ export const updateSuperAdminById = asyncHandler(async (req, res) => {
 
 // ✅ GET all business listings with user and category references
 export const getAllBusinessListings = asyncHandler(async (req, res) => {
-  if (req.user.role !== 'superadmin') {
-    return res.status(403).json({ message: 'Access denied: SuperAdmin only.' });
-  }
 
   try {
-    const businesses = await business.find()
+    const businesses = await Business.find()
       .populate('owner', 'fullName email')  // ✅ this must match field name in schema
       .sort({ createdAt: -1 });
 
@@ -167,7 +164,7 @@ export const deleteUserById = asyncHandler(async (req, res) => {
 export const deleteBusinessListingById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const businessListing = await business.findByIdAndDelete(id);
+  const businessListing = await Business.findByIdAndDelete(id);
 
   if (!businessListing) {
     return res.status(404).json({ message: 'Business listing not found.' });

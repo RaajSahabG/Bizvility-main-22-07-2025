@@ -1,5 +1,3 @@
-// utils/sendNotification.js
-
 import Notification from '../models/Notification.js';
 import User from '../models/user.js';
 
@@ -13,19 +11,15 @@ export const initNotificationSystem = (_io, _onlineUsers) => {
 
   // 🟢 Optional: Register global sender when initialized
   global.sendNotificationToUser = (userId, payload) => {
-    console.log(userId, socketId, payload);
     if (!io || !onlineUsers) {
       console.warn('⚠️ Socket system not initialized properly');
       return;
     }
 
-    const socketId = onlineUsers.get(userId.toString());
-    if (socketId) {
-      console.log(`📤 (Global) Emitting to ${socketId} ->`, payload);
-      io.to(socketId).emit('new_notification', payload);
-    } else {
-      console.log(`📭 (Global) User ${userId} not online`);
-    }
+    // 🔁 Emit to the user's room instead of direct socketId
+    const roomName = `user_${userId.toString()}`;
+    console.log(`📤 Emitting to room ${roomName} ->`, payload);
+    io.to(roomName).emit('new_notification', payload);
   };
 };
 
@@ -59,7 +53,7 @@ export const notifyUser = async ({ userId, type, title, message, data = {} }) =>
       read: notification.read || false,
     };
 
-    // ✅ Emit real-time using global function
+    // ✅ Emit real-time using room-based global method
     if (global.sendNotificationToUser) {
       global.sendNotificationToUser(userId.toString(), payload);
     } else {
@@ -73,7 +67,6 @@ export const notifyUser = async ({ userId, type, title, message, data = {} }) =>
     return null;
   }
 };
-
 
 /**
  * 🔔 Notify all users of a specific role
@@ -103,11 +96,13 @@ export const notifyRole = async ({ role, type, title, message, data = {} }) => {
       createdAt: notification.createdAt,
       read: false
     };
+    
 
-    // 🔊 Emit to room (if users joined room by role)
-    io.to(role).emit('new_notification', payload);
-
-    console.log(`📨 Notified role [${role}]`);
+    // 🔊 Emit to role-based room
+    const roleRoom = `role_${role}`;
+    io.to(roleRoom).emit('new_notification', payload);
+     //console.log("type", payload.type());
+    console.log(`📨 Notified role [${role}] via room ${roleRoom}`);
     return notification;
 
   } catch (err) {

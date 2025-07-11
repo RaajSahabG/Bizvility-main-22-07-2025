@@ -15,7 +15,7 @@ const mediaFields = upload.fields([
 ]);
 
 router.post('/business', protect, mediaFields, createBusiness);
-router.put('/business/:id', protect, mediaFields, roles('superadmin', 'customer'), updateBusiness);
+router.put('/business/:id', protect, mediaFields, roles('superadmin', 'customer', 'admin'), updateBusiness);
 // router.get('/business/:id', protect, getBusinessById);
 router.get('/businesses', getAllBusinesses)
 router.get('/byid/:id', getBusinessId);

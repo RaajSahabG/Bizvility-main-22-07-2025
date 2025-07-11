@@ -9,7 +9,7 @@ import { notifyRole, notifyUser } from '../utils/sendNotification.js';
 // ✅ Create new event
 export const createEvent = asyncHandler(async (req, res) => {
   const { business, title, description, startTime, endTime, link, location } = req.body;
-  const bannerImage = req.file?.path;
+  const eventImages = req.file?.path;
 
   const businessExists = await Business.findById(business);
   if (!businessExists) {
@@ -24,7 +24,7 @@ export const createEvent = asyncHandler(async (req, res) => {
     endTime,
     link,
     location,
-    bannerImage,
+    eventImages,
     isApproved: false // Admin will approve later
   });
 
@@ -126,7 +126,7 @@ export const approveEvent = asyncHandler(async (req, res) => {
     link,
     location,
     isApproved,
-    bannerImage
+    eventImages
   } = req.body;
 
   const updatedFields = {
@@ -137,7 +137,7 @@ export const approveEvent = asyncHandler(async (req, res) => {
     link,
     location,
     isApproved,
-    bannerImage
+    eventImages
   };
 
   const event = await Event.findByIdAndUpdate(id, updatedFields, { new: true });
