@@ -10,7 +10,6 @@ import moment from 'moment'; // Optional for time comparison
 import Leads from '../models/Leads.js';
 import { notifyUser, notifyRole } from '../utils/sendNotification.js';
 
-
 const categoryModels = {
   Health,
   Hotel: Hotel,
@@ -20,9 +19,6 @@ const categoryModels = {
 
 //create business with notification
 export const createBusiness = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
     const {
       name,
@@ -54,16 +50,11 @@ export const createBusiness = async (req, res) => {
 
     const registerNumber = parsedCategoryData?.registerNumber;
     if (!registerNumber) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({ message: 'Registration number is required' });
     }
 
-    // ✅ Check for duplicate registration number before creating anything
     const existingCategory = await CategoryModel.findOne({ registerNumber });
     if (existingCategory) {
-      await session.abortTransaction();
-      session.endSession();
       return res.status(409).json({ message: 'Duplicate registration number. Business not created.' });
     }
 
@@ -78,17 +69,15 @@ export const createBusiness = async (req, res) => {
     }));
 
     const files = req.files || {};
-    const profileImage = files.profileImage?.[0]?.path || null;
-    const coverImage = files.coverImage?.[0]?.path || null;
-    const certificateImages = files.certificateImages?.map(f => f.path).slice(0, 5) || [];
-    const galleryImages = files.galleryImages?.map(f => f.path).slice(0, 10) || [];
+    const profileImage = files.profileImage?.[0]?.location || null;
+    const coverImage = files.coverImage?.[0]?.location || null;
+    const certificateImages = files.certificateImages?.map(f => f.location).slice(0, 5) || [];
+    const galleryImages = files.galleryImages?.map(f => f.location).slice(0, 10) || [];
 
     let salesExecutive = null;
     if (referralCode) {
       const refUser = await User.findOne({ referralCode });
       if (!refUser) {
-        await session.abortTransaction();
-        session.endSession();
         return res.status(400).json({ message: 'Invalid referral code' });
       }
       salesExecutive = refUser._id;
@@ -102,8 +91,8 @@ export const createBusiness = async (req, res) => {
       }
     }
 
-    // ✅ Step 1: Create Business (inside session)
-    const [business] = await Business.create([{
+    // ✅ Create Business
+    const business = await Business.create({
       name,
       ownerName,
       owner,
@@ -123,22 +112,20 @@ export const createBusiness = async (req, res) => {
       categoryModel: category,
       services: parsedServices,
       salesExecutive
-    }], { session });
+    });
 
-    // ✅ Step 2: Create category-specific document (inside session)
-    const [categoryDoc] = await CategoryModel.create([{
+    // ✅ Create category-specific document
+    const categoryDoc = await CategoryModel.create({
       ...parsedCategoryData,
       business: business._id
-    }], { session });
+    });
 
-    business.categoryRef = categoryDoc._id;
-    await business.save({ session });
+    // ✅ Update business with category reference (no session used)
+    await Business.findByIdAndUpdate(business._id, {
+      $set: { categoryRef: categoryDoc._id }
+    });
 
-    // ✅ Commit the transaction
-    await session.commitTransaction();
-    session.endSession();
-
-    // 📇 Create Lead (not part of transaction)
+    // 📇 Create Lead (not in transaction)
     try {
       const user = await User.findById(owner).select('fullName email');
       if (user) {
@@ -211,13 +198,10 @@ export const createBusiness = async (req, res) => {
     });
 
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
     console.error('❌ Error creating business:', error);
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
-
 
 
 
@@ -264,12 +248,12 @@ export const updateBusiness = async (req, res) => {
     /* ------------------------------------------------------------------ */
     const files = req.files || {};
 
-    if (files.profileImage?.length)  business.profileImage  = files.profileImage[0].path;
-    if (files.coverImage?.length)    business.coverImage    = files.coverImage[0].path;
+    if (files.profileImage?.length)  business.profileImage  = files.profileImage[0].location;
+    if (files.coverImage?.length)    business.coverImage    = files.coverImage[0].location;
     if (files.certificateImages?.length)
-      business.certificateImages = files.certificateImages.map(f => f.path).slice(0, 5);
+      business.certificateImages = files.certificateImages.map(f => f.location).slice(0, 5);
     if (files.galleryImages?.length)
-      business.galleryImages = files.galleryImages.map(f => f.path).slice(0, 10);
+      business.galleryImages = files.galleryImages.map(f => f.location).slice(0, 10);
 
     /* ------------------------------------------------------------------ */
     /* 5️⃣  Update scalar fields                                          */
