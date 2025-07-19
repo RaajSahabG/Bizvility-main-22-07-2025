@@ -13,7 +13,7 @@ const mediaFields = upload.fields([
   { name: 'certificateImages', maxCount: 5 }, // ✅ fixed field name
   { name: 'galleryImages', maxCount: 10 }
 ]);
-
+ 
 router.post('/business', protect, mediaFields, createBusiness);
 router.put('/business/:id', protect, mediaFields, roles('superadmin', 'customer', 'admin'), updateBusiness);
 // router.get('/business/:id', protect, getBusinessById);

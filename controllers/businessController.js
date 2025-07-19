@@ -9,7 +9,8 @@ import User from '../models/user.js';
 import moment from 'moment'; // Optional for time comparison
 import Leads from '../models/Leads.js';
 import { notifyUser, notifyRole } from '../utils/sendNotification.js';
-
+import Priceplan from '../models/Priceplan.js';
+import mongoose from 'mongoose';
 const categoryModels = {
   Health,
   Hotel: Hotel,
@@ -35,7 +36,8 @@ export const createBusiness = async (req, res) => {
       description,
       referralCode,
       services,
-      categoryData
+      categoryData,
+      planId // ✅ add this
     } = req.body;
 
     const CategoryModel = categoryModels[category];
@@ -90,6 +92,27 @@ export const createBusiness = async (req, res) => {
         salesExecutive = salesUsers[randomIndex]._id;
       }
     }
+// ✅ Validate Plan ID if provided
+const rawPlanId = req.body.planId;
+const cleanPlanId = typeof rawPlanId === 'string'
+  ? rawPlanId.trim().replace(/^["']|["']$/g, '')
+  : rawPlanId;
+  
+let validPlanId = null;
+if (cleanPlanId) {
+  const isValid = mongoose.Types.ObjectId.isValid(cleanPlanId);
+  if (!isValid) {
+    return res.status(400).json({ message: 'Invalid plan ID format' });
+  }
+
+  const plan = await Priceplan.findById(cleanPlanId);
+  if (!plan) {
+    return res.status(400).json({ message: 'Plan not found' });
+  }
+
+  validPlanId = plan._id;
+}
+
 
     // ✅ Create Business
     const business = await Business.create({
@@ -111,7 +134,8 @@ export const createBusiness = async (req, res) => {
       category,
       categoryModel: category,
       services: parsedServices,
-      salesExecutive
+      salesExecutive,
+      plan: validPlanId
     });
 
     // ✅ Create category-specific document
@@ -202,6 +226,8 @@ export const createBusiness = async (req, res) => {
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
+
+
 
 
 
