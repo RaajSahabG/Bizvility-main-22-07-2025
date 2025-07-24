@@ -1,4 +1,3 @@
-
 import Business from '../models/Business.js';
 import Health from '../models/Health.js';
 import Hotel from '../models/Hotel.js';
@@ -11,6 +10,8 @@ import Leads from '../models/Leads.js';
 import { notifyUser, notifyRole } from '../utils/sendNotification.js';
 import Priceplan from '../models/Priceplan.js';
 import mongoose from 'mongoose';
+import { uploadToS3 } from '../middlewares/upload.js';
+import Payment from "../models/Payment.js"; // 🔄 UPDATED: To associate payment with business
 const categoryModels = {
   Health,
   Hotel: Hotel,
@@ -19,6 +20,9 @@ const categoryModels = {
 
 
 //create business with notification
+
+// ADD AT THE TOP WITH OTHER IMPORTS:
+
 export const createBusiness = async (req, res) => {
   try {
     const {
@@ -37,7 +41,8 @@ export const createBusiness = async (req, res) => {
       referralCode,
       services,
       categoryData,
-      planId // ✅ add this
+      planId,
+      paymentId // 🔄 NEW: expected only for paid plan
     } = req.body;
 
     const CategoryModel = categoryModels[category];
@@ -70,11 +75,21 @@ export const createBusiness = async (req, res) => {
       close: entry.close || ''
     }));
 
+    // ✅ Upload to S3
     const files = req.files || {};
-    const profileImage = files.profileImage?.[0]?.location || null;
-    const coverImage = files.coverImage?.[0]?.location || null;
-    const certificateImages = files.certificateImages?.map(f => f.location).slice(0, 5) || [];
-    const galleryImages = files.galleryImages?.map(f => f.location).slice(0, 10) || [];
+    const uploadedFiles = {};
+    for (const field in files) {
+      uploadedFiles[field] = [];
+      for (const file of files[field]) {
+        const s3Url = await uploadToS3(file, req);
+        uploadedFiles[field].push(s3Url);
+      }
+    }
+
+    const profileImage = uploadedFiles.profileImage?.[0] || null;
+    const coverImage = uploadedFiles.coverImage?.[0] || null;
+    const certificateImages = uploadedFiles.certificateImages?.slice(0, 5) || [];
+    const galleryImages = uploadedFiles.galleryImages?.slice(0, 10) || [];
 
     let salesExecutive = null;
     if (referralCode) {
@@ -92,27 +107,41 @@ export const createBusiness = async (req, res) => {
         salesExecutive = salesUsers[randomIndex]._id;
       }
     }
-// ✅ Validate Plan ID if provided
-const rawPlanId = req.body.planId;
-const cleanPlanId = typeof rawPlanId === 'string'
-  ? rawPlanId.trim().replace(/^["']|["']$/g, '')
-  : rawPlanId;
-  
-let validPlanId = null;
-if (cleanPlanId) {
-  const isValid = mongoose.Types.ObjectId.isValid(cleanPlanId);
-  if (!isValid) {
-    return res.status(400).json({ message: 'Invalid plan ID format' });
-  }
 
-  const plan = await Priceplan.findById(cleanPlanId);
-  if (!plan) {
-    return res.status(400).json({ message: 'Plan not found' });
-  }
+    // ✅ Plan validation
+    const rawPlanId = planId;
+    const cleanPlanId = typeof rawPlanId === 'string'
+      ? rawPlanId.trim().replace(/^["']|["']$/g, '')
+      : rawPlanId;
 
-  validPlanId = plan._id;
-}
+    let validPlan = null;
+    if (cleanPlanId) {
+      const isValid = mongoose.Types.ObjectId.isValid(cleanPlanId);
+      if (!isValid) {
+        return res.status(400).json({ message: 'Invalid plan ID format' });
+      }
 
+      const plan = await Priceplan.findById(cleanPlanId);
+      if (!plan) {
+        return res.status(400).json({ message: 'Plan not found' });
+      }
+      validPlan = plan;
+
+      // 🔄 NEW: If plan is paid, payment must be completed and passed
+      if (plan.price > 0) {
+        if (!paymentId) {
+          return res.status(400).json({ message: 'Payment ID is required for paid plans' });
+        }
+
+        const payment = await Payment.findOne({ paymentId });
+
+        if (!payment || payment.status !== 'success') {
+          return res.status(400).json({ message: 'Payment not found or not verified' });
+        }
+
+        // 🔗 Optional: Link payment to business later after business is created
+      }
+    }
 
     // ✅ Create Business
     const business = await Business.create({
@@ -135,21 +164,28 @@ if (cleanPlanId) {
       categoryModel: category,
       services: parsedServices,
       salesExecutive,
-      plan: validPlanId
+      plan: validPlan?._id || null
     });
 
-    // ✅ Create category-specific document
+    // 🔗 Optional: If paid plan, update payment to link with business
+    if (validPlan?.price > 0 && paymentId) {
+      await Payment.findOneAndUpdate(
+        { paymentId },
+        { $set: { business: business._id } },
+        { new: true }
+      );
+    }
+
     const categoryDoc = await CategoryModel.create({
       ...parsedCategoryData,
       business: business._id
     });
 
-    // ✅ Update business with category reference (no session used)
     await Business.findByIdAndUpdate(business._id, {
       $set: { categoryRef: categoryDoc._id }
     });
 
-    // 📇 Create Lead (not in transaction)
+    // 📇 Create Lead
     try {
       const user = await User.findById(owner).select('fullName email');
       if (user) {
@@ -167,7 +203,7 @@ if (cleanPlanId) {
       console.warn("⚠️ Lead creation failed:", leadErr.message);
     }
 
-    // 🔔 Notifications
+    // 🔔 Notify
     if (salesExecutive) {
       await notifyUser({
         userId: salesExecutive,
@@ -272,14 +308,34 @@ export const updateBusiness = async (req, res) => {
     /* ------------------------------------------------------------------ */
     /* 4️⃣  Handle file uploads                                           */
     /* ------------------------------------------------------------------ */
-    const files = req.files || {};
+    const { uploadToS3 } = await import('../middlewares/upload.js'); // ✅ dynamic import for ESM
 
-    if (files.profileImage?.length)  business.profileImage  = files.profileImage[0].location;
-    if (files.coverImage?.length)    business.coverImage    = files.coverImage[0].location;
-    if (files.certificateImages?.length)
-      business.certificateImages = files.certificateImages.map(f => f.location).slice(0, 5);
-    if (files.galleryImages?.length)
-      business.galleryImages = files.galleryImages.map(f => f.location).slice(0, 10);
+const files = req.files || {};
+
+if (files.profileImage?.length) {
+  const url = await uploadToS3(files.profileImage[0], req);
+  business.profileImage = url;
+}
+
+if (files.coverImage?.length) {
+  const url = await uploadToS3(files.coverImage[0], req);
+  business.coverImage = url;
+}
+
+if (files.certificateImages?.length) {
+  const certUrls = await Promise.all(
+    files.certificateImages.slice(0, 5).map(file => uploadToS3(file, req))
+  );
+  business.certificateImages = certUrls;
+}
+
+if (files.galleryImages?.length) {
+  const galleryUrls = await Promise.all(
+    files.galleryImages.slice(0, 10).map(file => uploadToS3(file, req))
+  );
+  business.galleryImages = galleryUrls;
+}
+
 
     /* ------------------------------------------------------------------ */
     /* 5️⃣  Update scalar fields                                          */
@@ -353,7 +409,6 @@ export const updateBusiness = async (req, res) => {
     });
   }
 };
-
 
 
 

@@ -42,7 +42,7 @@ const eventSchema = new mongoose.Schema({
   },
 
   // Optional image/banner
-  eventImages: {
+  eventsImage: {
     type: String // file path or URL
   }
 

@@ -3,77 +3,94 @@ import Event from '../models/Events.js';
 import Business from '../models/Business.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { notifyRole, notifyUser } from '../utils/sendNotification.js';
-
+import { uploadToS3 } from '../middlewares/upload.js'; // ✅ Import S3 uploader
 
 //create event with notification
 // ✅ Create new event
 export const createEvent = asyncHandler(async (req, res) => {
-  const { business, title, description, startTime, endTime, link, location } = req.body;
-  const eventImages = req.file?.path;
+  try {
+    const {
+      title,
+      description,
+      date,
+      location,
+      ...otherFields
+    } = req.body;
 
-  const businessExists = await Business.findById(business);
-  if (!businessExists) {
-    return res.status(404).json({ message: 'Business not found' });
-  }
+    let eventsImage = '';
 
-  const event = await Event.create({
-    business,
-    title,
-    description,
-    startTime,
-    endTime,
-    link,
-    location,
-    eventImages,
-    isApproved: false // Admin will approve later
-  });
-
-  // ✅ Notify Admin and SuperAdmin
-  const notifyPayload = {
-    type: 'EVENT_REQUEST',
-    title: '📅 New Event Submitted',
-    message: `An event "${title}" has been submitted and is awaiting approval.`,
-    data: {
-      eventId: event._id,
-      businessId: business,
-      redirectPath: `/admin/events/${event._id}`  // your frontend event approval path
+    if (req.file) {
+      const s3Url = await uploadToS3(req.file, req); // Returns full S3 URL
+      eventsImage = s3Url;
     }
-  };
 
-  const eventsData = await Promise.all([
-    notifyRole({ role: 'admin', ...notifyPayload }),
-    notifyRole({ role: 'superadmin', ...notifyPayload })
-  ]);
+    const newEvent = new Event({
+      title,
+      description,
+      date,
+      location,
+      eventsImage: eventsImage,
+      ...otherFields,
+    });
 
-  res.status(201).json({
-    message: 'Event created successfully',
-    event,
-    eventsData
-  });
+    const savedEvent = await newEvent.save();
+    res.status(201).json({
+      success: true,
+      message: 'Event created successfully',
+      imageUrl: eventsImage, 
+      data: savedEvent,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Event creation failed',
+      error: err.message,
+    });
+  }
 });
+
 
 
 
 // ✅ Edit event
 export const updateEvent = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const updates = req.body;
+  try {
+    const { id } = req.params;
 
-  if (req.file?.path) {
-    updates.eventImages = req.file.path;
+    let updatedData = { ...req.body };
+
+    if (req.file) {
+      const s3Url = await uploadToS3(req.file, req);
+      updatedData.eventsImage = s3Url;
+    }
+
+    const updatedEvent = await Event.findByIdAndUpdate(
+      id,
+      updatedData,
+      { new: true }
+    );
+
+    if (!updatedEvent) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Event updated successfully',
+      data: updatedEvent,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Event update failed',
+      error: err.message,
+    });
   }
-
-  const updated = await Event.findByIdAndUpdate(id, updates, { new: true });
-
-  if (!updated) {
-    return res.status(404).json({ message: 'Event not found' });
-  }
-
-  res.status(200).json({
-    message: 'Event updated successfully',
-    event: updated
-  });
 });
+
 
 // ✅ Delete event
 export const deleteEvent = asyncHandler(async (req, res) => {
